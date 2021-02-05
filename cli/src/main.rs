@@ -9,6 +9,10 @@ use redscript::error::Error;
 use redscript_compiler::Compiler;
 use redscript_decompiler::files::FileIndex;
 use redscript_decompiler::print::{write_definition, OutputMode};
+use std::ffi::OsStr;
+use redscript_compiler::source_map::Files;
+use walkdir::WalkDir;
+use redscript_compiler::parser;
 
 #[derive(Debug, Options)]
 enum Command {
@@ -18,6 +22,8 @@ enum Command {
     Compile(CompileOpts),
     #[options(help = "[opts]")]
     Lint(LintOpts),
+    #[options(help = "[opts]")]
+    Defs(CompileOpts),
 }
 
 #[derive(Debug, Options)]
@@ -78,6 +84,7 @@ fn run() -> Result<(), Error> {
         Command::Decompile(opts) => decompile(opts),
         Command::Compile(opts) => compile(opts),
         Command::Lint(opts) => lint(opts),
+        Command::Defs(opts) => defs(opts),
     }
 }
 
@@ -149,4 +156,21 @@ fn lint(opts: LintOpts) -> Result<(), Error> {
         }
         None => Ok(()),
     }
+}
+
+fn defs(opts: CompileOpts) -> Result<(), Error> {
+    let mut files = Files::new();
+    let mut output = BufWriter::new(File::create(&opts.output)?);
+    let path = &opts.src;
+
+    for entry in WalkDir::new(path)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| e.path().extension() == Some(OsStr::new("reds")))
+    {
+        let sources = std::fs::read_to_string(entry.path())?;
+        files.add(entry.path().to_owned(), &sources);
+    }
+    let entries = parser::parse(files.sources()).unwrap();
+    serde_json::to_writer(&mut output, &entries).unwrap();
 }

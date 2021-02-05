@@ -5,43 +5,47 @@ use peg::str::LineCol;
 use redscript::ast::{BinOp, Constant, Expr, Ident, LiteralType, Pos, Seq, SwitchCase, TypeName, UnOp};
 use redscript::definition::Visibility;
 use strum::EnumString;
+use serde::Serialize;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum SourceEntry {
     Class(ClassSource),
     Function(FunctionSource),
 }
-#[derive(Debug)]
+
+#[derive(Debug, Serialize)]
 pub struct ClassSource {
     pub qualifiers: Qualifiers,
     pub name: String,
     pub base: Option<String>,
     pub members: Vec<MemberSource>,
+    #[serde(skip)]
     pub pos: Pos,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum MemberSource {
     Function(FunctionSource),
     Field(Declaration, TypeName),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct FunctionSource {
     pub declaration: Declaration,
     pub type_: Option<TypeName>,
     pub parameters: Vec<ParameterSource>,
+    #[serde(skip)]
     pub body: Option<Seq>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct ParameterSource {
     pub qualifiers: Qualifiers,
     pub name: String,
     pub type_: TypeName,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 pub enum Qualifier {
     Public,
     Protected,
@@ -54,9 +58,14 @@ pub enum Qualifier {
     Callback,
     Out,
     Optional,
+    Abstract,
+    Persistent,
+    Inline,
+    Edit,
+    Rep,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Qualifiers(Vec<Qualifier>);
 
 impl Qualifiers {
@@ -74,24 +83,26 @@ impl Qualifiers {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Declaration {
     pub annotations: Vec<Annotation>,
     pub qualifiers: Qualifiers,
     pub name: String,
+    #[serde(skip)]
     pub pos: Pos,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Annotation {
     pub name: AnnotationName,
     pub value: String,
+    #[serde(skip)]
     pub pos: Pos,
 }
 
 impl Annotation {}
 
-#[derive(Debug, PartialEq, Eq, EnumString)]
+#[derive(Debug, PartialEq, Eq, EnumString, Serialize)]
 #[strum(serialize_all = "camelCase")]
 pub enum AnnotationName {
     ReplaceMethod,
@@ -127,6 +138,11 @@ peg::parser! {
             / keyword("cb") { Qualifier::Callback }
             / keyword("out") { Qualifier::Out }
             / keyword("opt") { Qualifier::Optional }
+            / keyword("abstract") { Qualifier::Abstract }
+            / keyword("persistent") { Qualifier::Persistent }
+            / keyword("inline") { Qualifier::Inline }
+            / keyword("edit") { Qualifier::Edit }
+            / keyword("rep") { Qualifier::Rep }
 
         rule literal_type() -> LiteralType
             = "n" { LiteralType::Name }
@@ -172,7 +188,7 @@ peg::parser! {
             { Declaration { annotations, qualifiers, name, pos: Pos::new(pos) } }
 
         rule let() -> Expr
-            = pos:position!() keyword("let") _ name:ident() _ type_:let_type()? _ val:initializer()? _ ";"
+            = pos:position!() (keyword("let") / keyword("const")) _ name:ident() _ type_:let_type()? _ val:initializer()? _ ";"
             { Expr::Declare(Ident::new(name), type_, val.map(Box::new), Pos::new(pos)) }
 
         rule initializer() -> Expr = "=" _ val:expr() { val }
@@ -189,7 +205,7 @@ peg::parser! {
         rule extends() -> String = keyword("extends") _ name:ident() { name }
 
         pub rule class() -> ClassSource
-            = pos:position!() qualifiers:qualifiers() _ keyword("class") _ name:ident() _ base:extends()? _ "{" _ members:member()**_ _ "}"
+            = pos:position!() qualifiers:qualifiers() _ (keyword("class") / keyword("struct")) _ name:ident() _ base:extends()? _ "{" _ members:member()**_ _ "}"
             { ClassSource { qualifiers, name, base, members, pos: Pos::new(pos) } }
 
         rule member() -> MemberSource

@@ -3,6 +3,7 @@ use std::ops::{Add, Sub};
 use std::rc::Rc;
 
 use strum::Display;
+use serde::Serialize;
 
 #[derive(Debug)]
 pub enum Expr {
@@ -177,7 +178,7 @@ impl Target {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct TypeName {
     pub name: String,
     pub arguments: Vec<TypeName>,
